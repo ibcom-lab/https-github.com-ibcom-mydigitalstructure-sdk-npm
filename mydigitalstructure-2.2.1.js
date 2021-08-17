@@ -911,7 +911,7 @@ module.exports =
 					if (_.isFunction(module.exports.controller[name]))
 					{
 						module.exports._util.controller.data.last = name;
-						returnData =  module.exports.controller[name](controllerParam, controllerData);
+						returnData = module.exports.controller[name](controllerParam, controllerData);
 					}
 					else
 					{
