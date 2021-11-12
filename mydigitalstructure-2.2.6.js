@@ -3,7 +3,7 @@ var moment = require('moment');
 
 module.exports = 
 {
-	VERSION: '2.2.4',
+	VERSION: '2.2.6',
 
 	data: {session: undefined},
 	controller: {},
@@ -190,7 +190,8 @@ module.exports =
 		var settings = module.exports.data.settings;
 		var session = module.exports.data.session;
 		var requestData;
-        var headers = {}
+        var headers = {};
+        if (options == undefined) {options = {}};
 
 		if (_.isUndefined(data))
 		{
@@ -201,27 +202,32 @@ module.exports =
 			requestData = data
 		}
 
+        if (options.contentType == undefined)
+        {
+            options.contentType = 'application/x-www-form-urlencoded'
+        }
+
 		if (_.isPlainObject(requestData))
 		{
 			requestData.sid = session.sid;
 			requestData.logonkey = session.logonkey;
 
-            var _requestData = []
-
-            for (key in requestData)
+            if (options.contentType != 'application/json')
             {
-               _requestData.push(key + '=' + requestData[key]);
-            }
-            
-            requestData = _.join(_requestData, '&')
+                var _requestData = []
 
-            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                for (key in requestData)
+                {
+                _requestData.push(key + '=' + requestData[key]);
+                }
+                
+                requestData = _.join(_requestData, '&')
+            }
+
             headers['Content-Length'] = requestData.length;
 		}
 		else
 		{    
-            headers['Content-Type'] = 'application/x-www-form-urlencoded';
-          
 			if (!_.isUndefined(requestData))
 			{	
 				requestData = requestData + '&sid=' + session.sid + '&logonkey=' + session.logonkey;
@@ -233,6 +239,8 @@ module.exports =
 
             headers['Content-Length'] = requestData.length;
 		}
+
+        headers['Content-Type'] = options.contentType;
 
 		if (_.isUndefined(callBack))
 		{
@@ -255,7 +263,7 @@ module.exports =
 			headers: headers
 		};
 
-		module.exports._util.testing.data(options, 'mydigitalstructure.cloud.send.request.options');
+		module.exports._util.testing.data(requestOptions, 'mydigitalstructure.cloud.send.request.options');
 
 		var req = https.request(requestOptions, function(res)
 		{
@@ -582,7 +590,8 @@ module.exports =
 				type: param.type,
 				url: param.url,
 				all: param.all,
-				rows: param.rows
+				rows: param.rows,
+                contentType: param.contentType
 			},
 			'criteria=' + JSON.stringify(param.data.criteria),
 			param.callback,
@@ -1319,11 +1328,121 @@ module.exports =
 				var num = parseInt(numStr, 10);
 				return String.fromCharCode(num);
 			});
-		}
-	},
+		},
+
+        attachment:
+        {
+            upload: function (param, fileData)
+            {
+                var filename = module.exports._util.param.get(param, 'filename', {default: 'learn.txt'}).value;
+                var object = module.exports._util.param.get(param, 'object').value;
+                var objectContext = module.exports._util.param.get(param, 'objectContext').value;
+                var base64 = module.exports._util.param.get(param, 'base64', {default: false}).value;
+                var type = module.exports._util.param.get(param, 'type').value;
+                var settings = module.exports.get({scope: '_settings'});
+                var session = module.exports.data.session;
+
+                if (base64)
+                {
+                    module.exports.cloud.invoke(
+                    {
+                        method: 'core_attachment_from_base64',
+                        data:
+                        {
+                            base64: fileData.base64,
+                            filename: filename,
+                            object: object,
+                            objectcontext: objectContext,
+                            sid: session.sid,
+                            logonkey: session.logonkey
+                        },
+                        callback: module.exports._util.attachment.process,
+                        callbackParam: param
+                    });
+                }
+                else
+                {
+                    if (fileData.buffer != undefined)
+                    {
+                        var blob = Buffer.from(fileData.buffer)
+                    }
+                    else
+                    {
+                        var blob = fileData;
+                    }
+                    
+                    var FormData = require('form-data');
+                    var form = new FormData();
+        
+                    form.append('file0', blob,
+                    {
+                        contentType: 'application/octet-stream',
+                        filename: filename
+                    });
+                    form.append('filename0', filename);
+                    form.append('object', object);
+                    form.append('objectcontext', objectContext);
+                    form.append('method', 'ATTACH_FILE');
+                    form.append('sid', session.sid);
+                    form.append('logonkey', session.logonkey);
+
+                    if (!_.isUndefined(type))
+                    {
+                        form.append('type0', type);
+                    }
+
+                    var url = 'https://' + settings.mydigitalstructure.hostname + '/rpc/attach/'
+
+                    form.submit(url, function(err, res)
+                    {
+                        res.resume();
+
+                        res.setEncoding('utf8');
+                        res.on('data', function (chunk)
+                        {
+                            var data = JSON.parse(chunk);
+                            module.exports.attachment.process(param, data)
+                        });
+                    });
+                }
+            },
+
+            process: function (param, response)
+            {
+                if (response.status == 'OK')
+                {
+                    var attachment;
+
+                    if (_.has(response, 'data.rows'))
+                    {
+                        attachment = _.first(response.data.rows);
+                    }
+                    else
+                    {
+                        attachment = response;
+                    }
+
+                    var data =
+                    {
+                        attachment:
+                        {
+                            id: attachment.attachment,
+                            link: attachment.attachmentlink,
+                            href: '/download/' + attachment.attachmentlink
+                        }
+                    }
+                }
+
+                param = module.exports._util.param.set(param, 'data', data);
+
+                module.exports._util.onComplete(param)
+            }
+        }
+    },
 
 	add: function (param) {return module.exports._util.controller.add(param)},
 	invoke: function (param, controllerParam, controllerData) {return module.exports._util.controller.invoke(param, controllerParam, controllerData)},
 	set: function (param) {return module.exports._util.data.set(param)},
-	get: function (param) {return module.exports._util.data.get(param)}
+	get: function (param) {return module.exports._util.data.get(param)},
+    upload: function (param, data) {return module.exports._util.attachment.upload(param, data)}
 }

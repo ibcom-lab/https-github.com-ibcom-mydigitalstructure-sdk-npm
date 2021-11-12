@@ -221,7 +221,6 @@ module.exports =
 		else
 		{    
             headers['Content-Type'] = 'application/x-www-form-urlencoded';
-            headers['Content-Length'] = requestData.length;
 		
 			if (!_.isUndefined(requestData))
 			{	
@@ -231,6 +230,8 @@ module.exports =
 			{
 				requestData = 'sid=' + session.sid + '&logonkey=' + session.logonkey;
 			}
+
+            headers['Content-Length'] = requestData.length;
 		}
 
 		if (_.isUndefined(callBack))
