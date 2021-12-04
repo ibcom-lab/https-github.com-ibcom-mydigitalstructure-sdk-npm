@@ -185,6 +185,8 @@ module.exports =
 
 	send: function (options, data, callBack, callBackParam)
 	{
+		//Send to mydigitalstructure.cloud
+
 		var https = require('https');
 		var querystring = require('querystring');
 		var settings = module.exports.data.settings;
@@ -213,13 +215,8 @@ module.exports =
 
 		if (_.isPlainObject(requestData))
 		{
-            //Now in auth-
-			//requestData.sid = session.sid;
-			//requestData.logonkey = session.logonkey;
-
-            if (options.contentType != 'application/json')
+            if (options.contentType == 'application/json')
             {
-                //or not native object?
                 requestData = JSON.stringify(requestData);
             }
             else
@@ -238,16 +235,6 @@ module.exports =
 		}
 		else
 		{    
-            //headers, so don't really need to do here.
-			if (!_.isUndefined(requestData))
-			{	
-				requestData = requestData + '&sid=' + session.sid + '&logonkey=' + session.logonkey;
-			}
-			else
-			{
-				requestData = 'sid=' + session.sid + '&logonkey=' + session.logonkey;
-			}
-
             headers['Content-Length'] = requestData.length;
 		}
 
@@ -430,16 +417,18 @@ module.exports =
 			}
 
 			var endpoint = param.object.split('_')[0];
+			var contentType;
 
 			if (_.isObject(param.data))
 			{
-				param.data = _.join(_.map(param.data, function (data, key) {return key + '=' + data}), '&')
+				contentType = 'application/json'
 			}
 
 			module.exports.send(
 			{
 				type: 'post',
-				url: '/rpc/' + endpoint + '/?method=' + (param.object).toUpperCase() + '_MANAGE'
+				url: '/rpc/' + endpoint + '/?method=' + (param.object).toUpperCase() + '_MANAGE',
+				contentType: contentType
 			},
 			param.data,
 			param.callback,
@@ -596,6 +585,11 @@ module.exports =
 				param.data._controller = param.object + ':' + JSON.stringify(param.data.criteria.fields);
 			}
 
+			if (param.contentType == undefined)
+			{
+				param.contentType = 'application/json'
+			}
+
 			module.exports.send(
 			{
 				type: param.type,
@@ -604,7 +598,7 @@ module.exports =
 				rows: param.rows,
                 contentType: param.contentType
 			},
-			'criteria=' + JSON.stringify(param.data.criteria),
+			param.data.criteria,
 			param.callback,
 			param.callbackParam);
 		},
@@ -1243,6 +1237,8 @@ module.exports =
 
 		send: function (options, callBack)
 		{
+			//Send to other internet service
+
             var session = module.exports.data.session;
 			var https = require('https');
 
@@ -1251,9 +1247,6 @@ module.exports =
 			if (_.isUndefined(options.action)) {options.action = 'GET'};
 
 			var headers = {};
-
-            headers['auth-sid'] = session.sid;
-            headers['auth-logonkey'] = session.logonkey;
 
 			if (options.headers != undefined)
 			{
@@ -1368,8 +1361,6 @@ module.exports =
                             filename: filename,
                             object: object,
                             objectcontext: objectContext,
-                            sid: session.sid,
-                            logonkey: session.logonkey
                         },
                         callback: module.exports._util.attachment.process,
                         callbackParam: param
@@ -1388,30 +1379,35 @@ module.exports =
                     
                     var FormData = require('form-data');
                     var form = new FormData();
-
-                    //set auth headers here.
         
+					console.log(filename)
+
                     form.append('file0', blob,
                     {
                         contentType: 'application/octet-stream',
                         filename: filename
                     });
+
+					console.log('blob')
                     form.append('filename0', filename);
                     form.append('object', object);
                     form.append('objectcontext', objectContext);
                     form.append('method', 'ATTACH_FILE');
-                    //can remove once in headers
-                    form.append('sid', session.sid);
-                    form.append('logonkey', session.logonkey);
-
+  
                     if (!_.isUndefined(type))
                     {
                         form.append('type0', type);
                     }
 
-                    var url = 'https://' + settings.mydigitalstructure.hostname + '/rpc/attach/'
+					var submitOptions =
+					{
+						port: 443,
+						host: settings.mydigitalstructure.hostname,
+						path: '/rpc/attach/',
+						headers: {'auth-sid': session.sid, 'auth-logonkey': session.logonkey}
+					  }
 
-                    form.submit(url, function(err, res)
+                    form.submit(submitOptions, function(err, res)
                     {
                         res.resume();
 
