@@ -2,6 +2,8 @@ var _ = require('lodash')
 var moment = require('moment');
 var mydigitalstructure = require('mydigitalstructure/mydigitalstructure.js');
 var XLSX = require('xlsx/xlsx.js');
+var XLSXops = require('xlsx/xlsxops.js');
+var numeral = require('numeral/numeral.js');
 var request = require('request');
 
 module.exports = 
@@ -63,6 +65,168 @@ module.exports =
 				  	{
 					  	sheetData.names = workbook.Workbook.Names;
 
+                        //CHECK IF NEED TO INSERT ANY CELLS BASED ON RANGES AND THEN ADJUST NAMES IN THE WORK BOOK.
+
+						_.each(exportFormats, function (format)
+						{
+							if (format.range != undefined)
+							{
+								_.each(sheetData.names,  function (name)
+								{
+									name.sheet = _.replaceAll(_.first(_.split(name.Ref, '!')), "'", '');
+						 			name.cell = _.replaceAll(_.last(_.split(name.Ref, '!')), '\\$', '');
+									name.row = numeral(name.cell).value();
+									name.col = _.replace(name.cell, name.row, '');
+
+									if (format.range.header != undefined)
+									{
+										if (format.range.header.name != undefined)
+										{
+											if (format.range.header.name.toLowerCase() == name.Name.toLowerCase())
+											{
+												format.range.header.cell = name.cell;
+											}
+										}
+
+										if (format.range.header.firstRow)
+										{
+											format.range.header.cell =
+												(format.range.header.firstRowColumn!=undefined?format.range.header.firstRowColumn:'A') + '1';
+										}
+									}
+
+									if (format.range.footer != undefined)
+									{
+										if (format.range.footer.name != undefined)
+										{
+											if (format.range.footer.name.toLowerCase() == name.Name.toLowerCase())
+											{
+												format.range.footer.cell = name.cell;
+											}
+										}
+
+										if (format.range.footer.lastRow)
+										{
+											format.range.footer.cell = (format.range.footer.lastRowColumn!=undefined?format.range.footer.lastRowColumn:'A') +
+													(parseInt(sheetData.names[format.sheet].maximumRow) + 1);
+										}
+									}
+								});
+
+								var headerRow = numeral(format.range.header.cell).value(); //45
+								var footerRow = numeral(format.range.footer.cell).value(); //53
+				   
+								format.fieldsStartRow = headerRow + 1; //46
+								format.fieldsEndRow = footerRow - 1; //52
+				   		   
+								var rows = _.range(format.fieldsStartRow, format.fieldsEndRow + 1);
+								
+								var data = _.find(exportData, function(_exportData)
+								{
+									return (_exportData.object == format.storage.object 
+												&& _exportData.field == format.storage.field)
+								});
+							   
+							   if (data != undefined)
+							   {
+                                    console.log('ADD ROWS');
+                                    console.log(data);
+
+									format.rowsToAdd = (data.value.length - rows.length + 1);
+
+                                    console.log(format);
+
+                                    console.log(data.value.length);
+                                    console.log(rows.length);
+                                    console.log(format.rowsToAdd);
+
+									if (format.rowsToAdd > 0)
+									{
+										worksheet = workbook.Sheets[format.sheet];
+
+										XLSXops.insert_rows(worksheet, format.fieldsEndRow, format.rowsToAdd);
+
+										format.rowsImpactedAfter = format.fieldsEndRow;
+
+										_.each(sheetData.names,  function (name)
+										{
+											if ((name.row > format.rowsImpactedAfter) && (name.sheet == format.sheet))
+											{
+												name.row = name.row + format.rowsToAdd;
+												name.cell = name.col + name.row;
+												name.Ref = '\'' + name.sheet + '\'!$' + name.col + '$' + name.row;
+											}
+										});
+
+										var newRows = _.range(format.fieldsEndRow + 1, (format.fieldsEndRow + format.rowsToAdd + 1));
+										
+                                        var minCol = 99999;
+                                        var maxCol = 0;
+
+										_.each(format.range.fields, function (field)
+										{
+											field._cellRC = XLSX.utils.decode_cell(field.column + format.fieldsEndRow);
+
+                                            if (field._cellRC.c < minCol) {minCol = field._cellRC.c}
+                                            if (field._cellRC.c > maxCol) {maxCol = field._cellRC.c}
+
+											field.merge = _.find(worksheet['!merges'], function (merge)
+											{
+												return (merge.s.c == field._cellRC.c) && (merge.s.r == field._cellRC.r);
+											});
+
+                                            if (field.merge != undefined)
+                                            {
+                                                if (field.merge.e.c > maxCol) {maxCol = field.merge.e.c}
+                                            }
+
+                                            _.each(worksheet['!validations'], function (validation)
+											{
+                                                if (!_.isPlainObject(validation.ref))
+                                                {
+                                                    validation.ref = XLSX.utils.decode_range(validation.ref);
+                                                }
+                                                
+												if ((validation.ref.e.c == field._cellRC.c) && (validation.ref.e.r == field._cellRC.r))
+                                                {
+                                                    validation.ref.e.r = format.fieldsEndRow + format.rowsToAdd
+                                                }
+											});
+										});
+
+										_.each(newRows, function (newRow)
+										{
+                                            var fieldColumns = _.range(minCol, (maxCol + 1));
+
+											_.each(fieldColumns, function (column)
+											{
+                                                var newCell = XLSX.utils.encode_cell({r: (newRow - 1), c: column});
+                                                var cloneCell = XLSX.utils.encode_cell({r: (format.fieldsEndRow - 1), c: column});
+
+                                                worksheet[newCell] = _.cloneDeep(worksheet[cloneCell]);
+												//worksheet[column + newRow] = _.cloneDeep(worksheet[column + format.fieldsEndRow]);
+											});
+
+											_.each(format.range.fields, function (field)
+											{
+												if (field.merge != undefined)
+												{
+													var newMerge = _.cloneDeep(field.merge);
+													newMerge.s.r = (newRow - 1);
+													newMerge.e.r = (newRow - 1);
+													worksheet['!merges'].push(newMerge);
+												}
+											});
+
+                                            worksheet['!rows'][(newRow - 1)] = worksheet['!rows'][(format.fieldsEndRow - 1)];
+										});
+									}
+							   }
+							}
+						});
+
+                        //RESOLVE NAMES TO CELLS
+
 					  	_.each(sheetData.names, function (name)
 					  	{
 					  		name.sheet = _.replaceAll(_.first(_.split(name.Ref, '!')), "'", '');
@@ -76,6 +240,43 @@ module.exports =
 											&& format.sheet == name.sheet)
 									{
 			   						format.cell = name.cell;
+									}
+								}
+
+                                if (format.range != undefined)
+								{
+									if (format.range.header != undefined)
+									{
+										if (format.range.header.name != undefined)
+										{
+											if (format.range.header.name.toLowerCase() == name.Name.toLowerCase())
+											{
+												format.range.header.cell = name.cell;
+											}
+										}
+
+										if (format.range.header.firstRow)
+										{
+											format.range.header.cell =
+												(format.range.header.firstRowColumn!=undefined?format.range.header.firstRowColumn:'A') + '1';
+										}
+									}
+
+									if (format.range.footer != undefined)
+									{
+										if (format.range.footer.name != undefined)
+										{
+											if (format.range.footer.name.toLowerCase() == name.Name.toLowerCase())
+											{
+												format.range.footer.cell = name.cell;
+											}
+										}
+
+										/*if (format.range.footer.lastRow)
+										{
+											format.range.footer.cell = (format.range.footer.lastRowColumn!=undefined?format.range.footer.lastRowColumn:'A') +
+													(numeral(sheetData.sheets[format.sheet].maximumRow).value() + 1);
+										}*/
 									}
 								}
 							});
@@ -92,44 +293,51 @@ module.exports =
 				  	{
 				  		if (format.sheet != undefined)
 				  		{
+                            worksheet = workbook.Sheets[format.sheet];
+
 					  		value = format.value;
 
-					  		if (format.storage != undefined)
-					  		{
-				  				var storageData = _.find(exportData, function (data)
-								{
-									return data.field == format.storage.field;
-								});
+                            if (format.range != undefined)
+                            {
+                                module.exports.sheet.range(format, workbook, worksheet, exportData);
+                            }	
+                            else
+                            { 
+                                if (format.storage != undefined)
+                                {
+                                    var storageData = _.find(exportData, function (data)
+                                    {
+                                        return data.field == format.storage.field;
+                                    });
 
-								if (storageData != undefined)
-								{
-									if (storageData.value != undefined)
-									{
-										value = _.unescape(_.unescape(storageData.value))
-									}
-								}
-					  		}
+                                    if (storageData != undefined)
+                                    {
+                                        if (storageData.value != undefined)
+                                        {
+                                            value = _.unescape(_.unescape(storageData.value))
+                                        }
+                                    }
+                                }
 
-						  	worksheet = workbook.Sheets[format.sheet];
+                                if (worksheet != undefined)
+                                {
+                                    cell = worksheet[format.cell];
 
-						  	if (worksheet != undefined)
-						  	{
-						  		cell = worksheet[format.cell];
+                                    if (cell == undefined)
+                                    {
+                                        cell = {};
+                                    }
 
-								if (cell == undefined)
-								{
-									cell = {};
-								}
+                                    cell.t = 's';
 
-								cell.t = 's';
-
-								if (format.type != undefined)
-								{
-									cell.t = format.type;
-								}
-							
-								cell.v = (value!=undefined?value:'');
-							}
+                                    if (format.type != undefined)
+                                    {
+                                        cell.t = format.type;
+                                    }
+                                
+                                    cell.v = (value!=undefined?value:'');
+                                }
+                            }
 						}
 					});
 
@@ -137,7 +345,7 @@ module.exports =
 
 				  	//https://github.com/sheetjs/sheetjs#writing-options
 			
-					if (true)
+					if (false)
 					{
 						sheetData.base64 = XLSX.write(workbook, {type: 'base64', cellStyles: true, bookImages: true});
 						sheetData.array = XLSX.write(workbook, {type: 'array', cellStyles: true, bookImages: true});
@@ -159,6 +367,90 @@ module.exports =
 				});
 			}
 		},
+
+        range: function (format, workbook, worksheet, exportData)
+ 		{
+ 			//Use range header to get cells to work through
+ 			//Assume cells have been resolved
+
+ 			var headerCell = format.range.header.cell; // A45
+ 			var headerRow = numeral(format.range.header.cell).value(); //45
+
+ 			var footerCell = format.range.footer.cell; // A53
+ 			var footerRow = numeral(format.range.footer.cell).value(); //53
+
+ 			var fieldsStartRow = headerRow + 1; //46
+ 			var fieldsEndRow = footerRow - 1; //52
+
+ 			var fields = format.range.fields;
+
+ 			var importData = []
+
+ 			var rows = _.range(fieldsStartRow, fieldsEndRow + 1);
+ 			
+ 			if (format.name == undefined)
+ 			{
+ 				format.name = _.camelCase(format.caption).toLowerCase();
+ 			}
+
+ 			var data = _.find(exportData, function(_exportData)
+			{
+				return (_exportData.object == format.storage.object 
+							&& _exportData.field == format.storage.field)
+			})
+			
+			if (data != undefined)
+			{
+				_.each(rows, function (row, r)
+				{
+					rowFields = _.cloneDeep(fields);
+					rowData = data.value[r];
+
+                    if (rowData != undefined)
+                    {
+                        _.each(rowFields, function (field)
+                        {
+                            field.suffix = (r + 1);
+                            field.row = row;
+                            field.cell = field.column + field.row;  
+
+                            field._cell = worksheet[field.cell];
+                            field._processing = {name: format.name + '-' + field.name + '-' + field.suffix, validate: {}, notes: {}}
+
+                            if (field._cell != undefined)
+                            {
+                                var value = rowData[field.name]
+
+                                if (value != undefined)
+                                {
+                                    field._cell.t = 's';
+
+                                    if (format.type != undefined)
+                                    {
+                                        field._cell.t = format.type;
+                                    }
+
+                                    if (_.has(field, 'format.values'))
+                                    {
+                                        if (field.format.values[value] != undefined)
+                                        {
+                                            value = field.format.values[value]
+                                        }
+                                    }
+                                
+                                    field._cell.v = (value!=undefined?value:'');
+                                }
+
+                                if (_.has(field, 'defaults.hasValue.style'))
+                                {
+                                     _.assign(field._cell.s, field.defaults.hasValue.style)   
+                                }
+                            }
+                        });
+                    }
+				});
+			}
+ 		},
 
 		store:
 		{
@@ -265,6 +557,7 @@ module.exports =
 		
 			complete: function (param)
 			{
+                //Should be onComplete
 				mydigitalstructure.invoke('app-process-add-scheduled-audit-process-checklist-send', param)
 			}
 		}
