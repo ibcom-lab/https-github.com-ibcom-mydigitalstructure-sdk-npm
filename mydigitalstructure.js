@@ -3,7 +3,7 @@ var moment = require('moment');
 
 module.exports = 
 {
-	VERSION: '2.2.5',
+	VERSION: '2.2.7',
 
 	data: {session: undefined},
 	controller: {},
@@ -185,12 +185,19 @@ module.exports =
 
 	send: function (options, data, callBack, callBackParam)
 	{
+		//Send to mydigitalstructure.cloud
+
 		var https = require('https');
 		var querystring = require('querystring');
 		var settings = module.exports.data.settings;
 		var session = module.exports.data.session;
 		var requestData;
-        var headers = {}
+        var headers = {};
+
+        headers['auth-sid'] = session.sid;
+        headers['auth-logonkey'] = session.logonkey;
+        
+        if (options == undefined) {options = {}};
 
 		if (_.isUndefined(data))
 		{
@@ -201,38 +208,37 @@ module.exports =
 			requestData = data
 		}
 
+        if (options.contentType == undefined)
+        {
+            options.contentType = 'application/x-www-form-urlencoded'
+        }
+
 		if (_.isPlainObject(requestData))
 		{
-			requestData.sid = session.sid;
-			requestData.logonkey = session.logonkey;
-
-            var _requestData = []
-
-            for (key in requestData)
+            if (options.contentType == 'application/json')
             {
-               _requestData.push(key + '=' + requestData[key]);
+                requestData = JSON.stringify(requestData);
             }
-            
-            requestData = _.join(_requestData, '&')
+            else
+            {
+                var _requestData = []
 
-            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+                for (key in requestData)
+                {
+                    _requestData.push(key + '=' + requestData[key]);
+                }
+                
+                requestData = _.join(_requestData, '&');                
+            }
+
             headers['Content-Length'] = requestData.length;
 		}
 		else
 		{    
-            headers['Content-Type'] = 'application/x-www-form-urlencoded';
-		
-			if (!_.isUndefined(requestData))
-			{	
-				requestData = requestData + '&sid=' + session.sid + '&logonkey=' + session.logonkey;
-			}
-			else
-			{
-				requestData = 'sid=' + session.sid + '&logonkey=' + session.logonkey;
-			}
-
             headers['Content-Length'] = requestData.length;
 		}
+
+        headers['Content-Type'] = options.contentType;
 
 		if (_.isUndefined(callBack))
 		{
@@ -255,7 +261,7 @@ module.exports =
 			headers: headers
 		};
 
-		module.exports._util.testing.data(options, 'mydigitalstructure.cloud.send.request.options');
+		module.exports._util.testing.data(requestOptions, 'mydigitalstructure.cloud.send.request.options');
 
 		var req = https.request(requestOptions, function(res)
 		{
@@ -411,16 +417,18 @@ module.exports =
 			}
 
 			var endpoint = param.object.split('_')[0];
+			var contentType;
 
 			if (_.isObject(param.data))
 			{
-				param.data = _.join(_.map(param.data, function (data, key) {return key + '=' + data}), '&')
+				contentType = 'application/json'
 			}
 
 			module.exports.send(
 			{
 				type: 'post',
-				url: '/rpc/' + endpoint + '/?method=' + (param.object).toUpperCase() + '_MANAGE'
+				url: '/rpc/' + endpoint + '/?method=' + (param.object).toUpperCase() + '_MANAGE',
+				contentType: contentType
 			},
 			param.data,
 			param.callback,
@@ -577,14 +585,20 @@ module.exports =
 				param.data._controller = param.object + ':' + JSON.stringify(param.data.criteria.fields);
 			}
 
+			if (param.contentType == undefined)
+			{
+				param.contentType = 'application/json'
+			}
+
 			module.exports.send(
 			{
 				type: param.type,
 				url: param.url,
 				all: param.all,
-				rows: param.rows
+				rows: param.rows,
+                contentType: param.contentType
 			},
-			'criteria=' + JSON.stringify(param.data.criteria),
+			param.data.criteria,
 			param.callback,
 			param.callbackParam);
 		},
@@ -1223,6 +1237,9 @@ module.exports =
 
 		send: function (options, callBack)
 		{
+			//Send to other internet service
+
+            var session = module.exports.data.session;
 			var https = require('https');
 
 			if (options == undefined) {options = {}}
@@ -1344,8 +1361,6 @@ module.exports =
                             filename: filename,
                             object: object,
                             objectcontext: objectContext,
-                            sid: session.sid,
-                            logonkey: session.logonkey
                         },
                         callback: module.exports._util.attachment.process,
                         callbackParam: param
@@ -1365,26 +1380,34 @@ module.exports =
                     var FormData = require('form-data');
                     var form = new FormData();
         
+					console.log(filename)
+
                     form.append('file0', blob,
                     {
                         contentType: 'application/octet-stream',
                         filename: filename
                     });
+
+					console.log('blob')
                     form.append('filename0', filename);
                     form.append('object', object);
                     form.append('objectcontext', objectContext);
                     form.append('method', 'ATTACH_FILE');
-                    form.append('sid', session.sid);
-                    form.append('logonkey', session.logonkey);
-
+  
                     if (!_.isUndefined(type))
                     {
                         form.append('type0', type);
                     }
 
-                    var url = 'https://' + settings.mydigitalstructure.hostname + '/rpc/attach/'
+					var submitOptions =
+					{
+						port: 443,
+						host: settings.mydigitalstructure.hostname,
+						path: '/rpc/attach/',
+						headers: {'auth-sid': session.sid, 'auth-logonkey': session.logonkey}
+					  }
 
-                    form.submit(url, function(err, res)
+                    form.submit(submitOptions, function(err, res)
                     {
                         res.resume();
 

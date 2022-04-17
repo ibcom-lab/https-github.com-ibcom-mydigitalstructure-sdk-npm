@@ -1,6 +1,11 @@
 mydigitalstructure Node.js module
 ====================================
 
+** mydigitalstructure is now entityOS **
+
+After 2.2.7 all updates are in the entityOS SDK.
+https://github.com/ibcom-lab/entityos-sdk-npm
+
 Node.js module for mydigitalstructure.cloud
 
 Makes it easy to init your node app onto the mydigitalstructure.cloud platform / API and send requests.
@@ -11,7 +16,7 @@ Makes it easy to init your node app onto the mydigitalstructure.cloud platform /
 
 > npm install mydigitalstructure
 
-> Example app; https://github.com/ibcom/mydigitalstructure-sdk-nodejs
+> Example app; https://github.com/ibcom-lab/mydigitalstructure-sdk-nodejs
 
 Version 2.0.0
 -------------
