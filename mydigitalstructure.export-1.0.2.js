@@ -126,13 +126,44 @@ module.exports =
 									return (_exportData.object == format.storage.object 
 												&& _exportData.field == format.storage.field)
 								});
+
+								worksheet = workbook.Sheets[format.sheet];
+								//Split into seperate validations
+								_.each(worksheet['!validations'], function (validation)
+								{
+									if (!_.isPlainObject(validation.ref))
+									{
+										var _ref = _.split(validation.ref, ' ');
+										if (_ref.length > 1)
+										{
+											var _validations = [];
+
+											_.each(_ref, function (ref, r)
+											{
+												if (r==0)
+												{
+													validation.ref = ref;
+												}
+												else
+												{
+													var _validation = _.cloneDeep(validation);
+													_validation.ref = ref;
+													_validations.push(_validation);
+												}
+											});
+
+											worksheet['!validations'] = _.concat(worksheet['!validations'], _validations);
+										}
+									}
+								});
 							   
-							   if (data != undefined)
-							   {
+							   	if (data != undefined)
+							  	{
                                     console.log('ADD ROWS');
                                     console.log(data);
 
 									format.rowsToAdd = (data.value.length - rows.length + 1);
+									if (format.rowsToAdd < 0) {format.rowsToAdd = 0}
 
                                     console.log(format);
 
@@ -207,35 +238,6 @@ module.exports =
 
                                             worksheet['!rows'][(newRow - 1)] = worksheet['!rows'][(format.fieldsEndRow - 1)];
 										});
-
-                                        //Split into seperate validations
-                                        _.each(worksheet['!validations'], function (validation)
-                                        {
-                                            if (!_.isPlainObject(validation.ref))
-                                            {
-                                                var _ref = _.split(validation.ref, ' ');
-                                                if (_ref.length > 1)
-                                                {
-                                                    var _validations = [];
-
-                                                    _.each(_ref, function (ref, r)
-                                                    {
-                                                        if (r==0)
-                                                        {
-                                                            validation.ref = ref;
-                                                        }
-                                                        else
-                                                        {
-                                                            var _validation = _.cloneDeep(validation);
-                                                            _validation.ref = ref;
-                                                            _validations.push(_validation);
-                                                        }
-                                                    });
-
-                                                    worksheet['!validations'] = _.concat(worksheet['!validations'], _validations);
-                                                }
-                                            }
-                                        });
 
                                         _.each(worksheet['!validations'], function (validation)
                                         {
