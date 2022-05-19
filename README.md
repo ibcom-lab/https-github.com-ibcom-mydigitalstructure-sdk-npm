@@ -1,45 +1,13 @@
-mydigitalstructure Node.js module
-====================================
+mydigitalstructure Node.js module has MOVED!
+============================================
 
 ** mydigitalstructure is now entityOS **
 
 After 2.2.7 all updates are in the entityOS SDK.
+
+As of 19MAY2022 latest code is now @
 https://github.com/ibcom-lab/entityos-sdk-npm
 
-Node.js module for mydigitalstructure.cloud
+The code exposes the same module so for backwards compatibility just do:
 
-Makes it easy to init your node app onto the mydigitalstructure.cloud platform / API and send requests.
-
-> http://mydigitalstructure.cloud
-
-> http://docs.mydigitalstructure.cloud/gettingstarted_nodejs
-
-> npm install mydigitalstructure
-
-> Example app; https://github.com/ibcom-lab/mydigitalstructure-sdk-nodejs
-
-Version 2.0.0
--------------
-
-**Initialise;**
-
-`var mydigitalstructure = require('mydigitalstructure');`
-
-Controller methods:
-- mydigitalstructure.add({name:, note:, code:});
-- mydigitalstructure.invoke(name, parameters for controller, data for controller);
-
-<!-- end of the list -->
-
-Local data storage methods:
-- mydigitalstructure.set({scope:, context:, name:, value:});
-- mydigitalstructure.get({scope:, context:, name:});
-
-<!-- end of the list -->
-
-Cloud data storage methods:
-- mydigitalstructure.cloud.save({object:, data:, callback:});
-- mydigitalstructure.cloud.retrieve({object:, data:, callback:});
-- mydigitalstructure.cloud.invoke({object:, data:, callback:});
-
-<!-- end of the list -->
+`var mydigitalstructure = require('entityos');`
